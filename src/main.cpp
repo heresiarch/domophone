@@ -10,6 +10,7 @@
 #include <WiFiClient.h> 
 #include <ESP8266HTTPClient.h>
 #include <WiFiClientSecure.h>
+#include <OneButton.h>
 
 
 
@@ -46,10 +47,30 @@ const String PARAMS_OPEN_GATE = "5";
 
 
 void open(const String gwtype);
-void wirelessconfig();
+void wirelessconfig(const bool reset);
+void click1();
+void click2();
+void longPressStart1();
+void duringLongPress1();
+void longPressStart2();
+void duringLongPress2();
+void longPressStop();
+boolean flag = false;
+
 void loadConfiguration(const char *filename);
 void saveConfiguration(const char *filename);
 
+// Setup a new OneButton on pin A1.  
+OneButton button1(D1, false, false);
+// Setup a new OneButton on pin A2.  
+OneButton button2(D2, false, false);
+
+unsigned long StartTimeButton1 = 0;
+unsigned long ElapsedTimeButton1 = 0;
+unsigned long StartTimeButton2 = 0;
+unsigned long ElapsedTimeButton2 = 0;
+// both buttons need to be pressed for 5 SECONDS
+#define LONG_PRESS_MS 5000
 
 void setup() 
 {
@@ -57,14 +78,20 @@ void setup()
   Serial.begin(115200);
   // Debugging only
   pinMode(LED, OUTPUT);
-  // Enable Input pins for our Switches
-  pinMode(D1,INPUT);
-  pinMode(D2,INPUT);
   // connected to DONE TPL5110 pin via pull-down 
   pinMode(D3,OUTPUT);
-
   // keep the DONE of TPL5110 low until we finished
   digitalWrite(D3,LOW);
+  button1.attachClick(click1);
+  button1.attachLongPressStart(longPressStart1);
+  // we need only one long press stop 
+  button1.attachLongPressStop(longPressStop);
+ 
+  button2.attachClick(click2);
+  button2.attachLongPressStart(longPressStart2);
+   // we need only one long press stop 
+  button2.attachLongPressStop(longPressStop);
+  
 }
 
 
@@ -73,39 +100,25 @@ void setup()
 //=======================================================================
 void loop() 
 {
-  // read pins
-  int d1 = digitalRead(D1);
-  int d2 = digitalRead(D2);
-  // do all the magic autoconfig
-  
-  if( d1 == 1 )
-  {
-    loadConfiguration(configFile);
-    wirelessconfig();
-    open(PARAMS_OPEN_GATEWAY);
-    Serial.println("OPEN_GATEWAY");
-  }
-  else if (d2 == 1)
-  {
-    loadConfiguration(configFile);
-    wirelessconfig();
-    open(PARAMS_OPEN_GATE);
-    Serial.println("OPEN_GATE");
-  }
-  // TPL5110 Terminate Power
-  digitalWrite(D3,HIGH);
+  button1.tick();
+  button2.tick();
+  // You can implement other code in here or just wait a while 
+  delay(10);  
 }
 //=======================================================================
 
 
-void wirelessconfig()
+void wirelessconfig(const bool reset)
 {
   WiFiManager wifiManager;
   //set config save notify callback
   wifiManager.setSaveConfigCallback(saveConfigCallback);
   wifiManager.setSTAStaticIPConfig(ip, gateway, subnet);
-  //reset settings - for testing
-  // wifiManager.resetSettings();
+  if(reset)
+  {
+    wifiManager.resetSettings();
+    Serial.println("DELETE_CONFIG");
+  }
   char port[6] = {0};
   itoa(domophoneHttpsPort,port,10);
   WiFiManagerParameter custom_APIKEY("APIKEY", "API-KEY", APIKEY, sizeof(APIKEY));
@@ -140,6 +153,46 @@ void wirelessconfig()
   } 
 }
 
+void click1() {
+  loadConfiguration(configFile);
+  wirelessconfig(false);
+  open(PARAMS_OPEN_GATEWAY);
+  digitalWrite(D3,HIGH);
+  // TPL5110 Terminate Power
+  digitalWrite(D3,HIGH);
+} // click1
+
+void click2() {
+  loadConfiguration(configFile);
+  wirelessconfig(false);
+  open(PARAMS_OPEN_GATE);
+  digitalWrite(D3,HIGH);
+  // TPL5110 Terminate Power
+  digitalWrite(D3,HIGH);
+} // click1
+
+void longPressStart1(){
+  StartTimeButton1 = millis();
+  Serial.println("StartLong1");  
+}
+void longPressStart2(){
+  StartTimeButton2 = millis();
+  Serial.println("StartLong2");
+}
+
+void longPressStop(){
+  ElapsedTimeButton1 = millis() - StartTimeButton1;
+  ElapsedTimeButton2 = millis() - StartTimeButton2;
+  Serial.println(ElapsedTimeButton1);
+  Serial.println(ElapsedTimeButton2);
+  
+  if(ElapsedTimeButton1 > LONG_PRESS_MS && ElapsedTimeButton2 > LONG_PRESS_MS && !flag)
+  {
+    flag = true;
+    Serial.println("DEADBEAF_RESET_CONFIG");
+    wirelessconfig(true);
+  }
+}
 
 
 void open(const String gwtype)
