@@ -205,6 +205,7 @@ void open(const String gwtype)
   if (!client.connect(domophoneIP,domophoneHttpsPort)) {
     Serial.println("Secure connection failed");
     Serial.flush();
+    digitalWrite(D3,HIGH);
     return;
   }
   Serial.flush();
